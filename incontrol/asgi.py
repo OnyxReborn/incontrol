@@ -22,7 +22,7 @@ application = ProtocolTypeRouter({
     "websocket": AllowedHostsOriginValidator(
         AuthMiddlewareStack(
             URLRouter([
-                path('ws/monitoring/', MonitoringConsumer.as_asgi()),
+                path("ws/monitoring/", MonitoringConsumer.as_asgi()),
             ])
         )
     ),

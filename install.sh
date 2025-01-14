@@ -40,11 +40,11 @@ apt-get install -y \
 echo "Creating application directory..."
 APP_DIR="/opt/incontrol"
 mkdir -p $APP_DIR
-cd $APP_DIR
 
-# Clone the repository
-echo "Cloning repository..."
-git clone https://github.com/yourusername/incontrol.git .
+# Copy current directory contents to APP_DIR
+echo "Copying application files..."
+cp -r ./* $APP_DIR/
+cd $APP_DIR
 
 # Create Python virtual environment
 echo "Setting up Python virtual environment..."
@@ -68,9 +68,12 @@ mysql_secure_installation
 
 # Create database and user
 echo "Creating database..."
-mysql -u root -p <<EOF
+read -p "Enter MySQL root password: " MYSQL_ROOT_PASSWORD
+read -p "Enter new password for incontrol database user: " INCONTROL_DB_PASSWORD
+
+mysql -u root -p${MYSQL_ROOT_PASSWORD} <<EOF
 CREATE DATABASE IF NOT EXISTS incontrol CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'incontrol'@'localhost' IDENTIFIED BY 'your_password_here';
+CREATE USER IF NOT EXISTS 'incontrol'@'localhost' IDENTIFIED BY '${INCONTROL_DB_PASSWORD}';
 GRANT ALL PRIVILEGES ON incontrol.* TO 'incontrol'@'localhost';
 FLUSH PRIVILEGES;
 EOF
@@ -169,10 +172,17 @@ chown -R www-data:www-data $APP_DIR
 
 # Create environment file
 echo "Creating environment file..."
-cp .env.example .env
-echo "Please update the .env file with your configuration"
-echo "Press any key to continue..."
-read -n 1
+if [ ! -f .env ]; then
+    cp .env.example .env
+    # Update database password in .env
+    sed -i "s/your-db-password-here/${INCONTROL_DB_PASSWORD}/g" .env
+    # Generate a random secret key
+    SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(50))')
+    sed -i "s/your-secret-key-here/${SECRET_KEY}/g" .env
+    echo "Please review and update the .env file with your configuration"
+    echo "Press any key to continue..."
+    read -n 1
+fi
 
 # Run migrations
 echo "Running database migrations..."
@@ -189,7 +199,7 @@ python manage.py createsuperuser
 # Final steps
 echo "Installation completed!"
 echo "Please complete these final steps:"
-echo "1. Update the .env file with your configuration"
+echo "1. Review the .env file at $APP_DIR/.env"
 echo "2. Restart the services: sudo supervisorctl restart all"
 echo "3. Access the control panel at http://your_server_ip"
 echo "4. Log in with the superuser credentials you just created"

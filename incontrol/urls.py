@@ -25,20 +25,20 @@ from rest_framework_simplejwt.views import (
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/monitoring/', include('monitoring.urls')),
-    path('api/backup/', include('backup.urls')),
+    path('api/accounts/', include('accounts.urls')),
+    path('api/system/', include('system.urls')),
     path('api/webserver/', include('webserver.urls')),
     path('api/database/', include('database.urls')),
     path('api/mail/', include('mail.urls')),
     path('api/security/', include('security.urls')),
+    path('api/backup/', include('backup.urls')),
     path('api/dns/', include('dns.urls')),
-    path('api/files/', include('filemanager.urls')),
-    path('api/processes/', include('processmanager.urls')),
-    path('api/logs/', include('logs.urls')),
+    path('api/filemanager/', include('filemanager.urls')),
+    path('api/processmanager/', include('processmanager.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

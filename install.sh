@@ -369,12 +369,160 @@ log "Setting up Python virtual environment..."
 cd /opt/incontrol
 setup_python_environment || error "Failed to set up Python environment"
 
+# Function to handle Node.js installation
+setup_nodejs() {
+    log "Setting up Node.js and npm..."
+    
+    # Remove existing Node.js and npm if installed
+    if dpkg -l | grep -q nodejs || dpkg -l | grep -q npm; then
+        log "Removing existing Node.js and npm installations..."
+        apt-get remove -y nodejs npm || true
+        apt-get autoremove -y
+    fi
+
+    # Remove nodesource if exists
+    rm -f /etc/apt/sources.list.d/nodesource.list*
+
+    # Clean apt cache
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+    apt-get update
+
+    # Install curl if not installed
+    if ! command -v curl &> /dev/null; then
+        apt-get install -y curl
+    fi
+
+    # Add NodeSource repository (for Node.js 18.x LTS)
+    log "Adding NodeSource repository..."
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+
+    # Add Yarn repository
+    log "Adding Yarn repository..."
+    curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
+    echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
+
+    # Update package list
+    apt-get update
+
+    # Install Node.js and npm
+    log "Installing Node.js and npm..."
+    if ! apt-get install -y nodejs; then
+        # If installation fails, try alternative approach
+        log "Standard installation failed, trying alternative approach..."
+        
+        # Download and install Node.js manually
+        local NODE_VERSION="18.19.0"  # Latest LTS version
+        local ARCH=$(dpkg --print-architecture)
+        local NODE_DOWNLOAD="node-v${NODE_VERSION}-linux-${ARCH}.tar.xz"
+        
+        cd /tmp
+        curl -O "https://nodejs.org/dist/v${NODE_VERSION}/${NODE_DOWNLOAD}"
+        tar -xf "${NODE_DOWNLOAD}"
+        
+        # Copy Node.js files to system
+        cd "node-v${NODE_VERSION}-linux-${ARCH}"
+        cp -r bin/* /usr/local/bin/
+        cp -r lib/* /usr/local/lib/
+        cp -r include/* /usr/local/include/
+        cp -r share/* /usr/local/share/
+        
+        # Clean up
+        cd ..
+        rm -rf "node-v${NODE_VERSION}-linux-${ARCH}" "${NODE_DOWNLOAD}"
+    fi
+
+    # Verify installation
+    if ! command -v node &> /dev/null; then
+        error "Failed to install Node.js"
+    fi
+    if ! command -v npm &> /dev/null; then
+        error "Failed to install npm"
+    fi
+
+    # Update npm to latest version
+    log "Updating npm..."
+    npm install -g npm@latest
+
+    # Install essential global packages
+    log "Installing essential npm packages..."
+    npm install -g yarn
+    npm install -g n
+    
+    # Install build tools
+    apt-get install -y build-essential python3-dev
+    
+    log "Node.js setup completed"
+    log "Node.js version: $(node -v)"
+    log "npm version: $(npm -v)"
+}
+
+# Function to handle frontend setup with retry logic
+setup_frontend() {
+    log "Setting up frontend..."
+    cd frontend || error "Frontend directory not found"
+    
+    # Clear existing node_modules and package-lock.json
+    rm -rf node_modules package-lock.json
+
+    # Try yarn first
+    log "Attempting to install dependencies with yarn..."
+    if command -v yarn &> /dev/null; then
+        yarn install --network-timeout 100000 || {
+            warning "Yarn install failed, falling back to npm..."
+            
+            # Try npm with various fallback options
+            for attempt in {1..3}; do
+                log "npm install attempt $attempt..."
+                
+                case $attempt in
+                    1)
+                        # Standard install
+                        if npm install; then
+                            break
+                        fi
+                        ;;
+                    2)
+                        # Try with legacy peer deps
+                        if npm install --legacy-peer-deps; then
+                            break
+                        fi
+                        ;;
+                    3)
+                        # Try with force and clean cache
+                        npm cache clean --force
+                        if npm install --force; then
+                            break
+                        fi
+                        ;;
+                esac
+            done
+        }
+    else
+        # If yarn is not available, use npm directly
+        npm install || error "Failed to install frontend dependencies"
+    fi
+
+    # Build frontend
+    log "Building frontend..."
+    if [ -f "package.json" ]; then
+        if grep -q "\"build\"" package.json; then
+            npm run build || error "Failed to build frontend"
+        else
+            warning "No build script found in package.json"
+        fi
+    else
+        error "package.json not found"
+    fi
+
+    cd ..
+}
+
+# Set up Node.js
+setup_nodejs || error "Failed to set up Node.js"
+
 # Set up frontend
-log "Setting up frontend..."
-cd frontend
-npm install || error "Failed to install Node.js dependencies"
-npm run build || error "Failed to build frontend"
-cd ..
+setup_frontend || error "Failed to set up frontend"
 
 # Generate secure MySQL password
 MYSQL_PASSWORD=$(openssl rand -base64 32)

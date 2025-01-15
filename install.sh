@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Exit on error
+set -e
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -18,6 +21,98 @@ print_error() {
 print_warning() {
     echo -e "${YELLOW}[Warning]${NC} $1"
 }
+
+# Function to check command status
+check_status() {
+    if [ $? -ne 0 ]; then
+        print_error "$1"
+        exit 1
+    fi
+}
+
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Function to check required ports
+check_ports() {
+    local ports=("80" "443" "3306" "6379" "8000")
+    for port in "${ports[@]}"; do
+        if netstat -tuln | grep -q ":$port "; then
+            print_warning "Port $port is already in use. Please ensure it's not being used by another application."
+            read -p "Continue anyway? (y/n) [n]: " continue_install
+            continue_install=${continue_install:-n}
+            if [ "$continue_install" != "y" ]; then
+                exit 1
+            fi
+        fi
+    done
+}
+
+# Function to check system resources
+check_resources() {
+    # Check RAM
+    local total_ram=$(free -m | awk '/^Mem:/{print $2}')
+    if [ $total_ram -lt 1024 ]; then
+        print_warning "System has less than 1GB RAM. This may affect performance."
+        read -p "Continue anyway? (y/n) [n]: " continue_install
+        continue_install=${continue_install:-n}
+        if [ "$continue_install" != "y" ]; then
+            exit 1
+        fi
+    fi
+
+    # Check disk space
+    local free_space=$(df -m /opt | awk 'NR==2 {print $4}')
+    if [ $free_space -lt 5120 ]; then
+        print_warning "Less than 5GB free space available. This may not be sufficient."
+        read -p "Continue anyway? (y/n) [n]: " continue_install
+        continue_install=${continue_install:-n}
+        if [ "$continue_install" != "y" ]; then
+            exit 1
+        fi
+    fi
+}
+
+# Function to validate domain name
+validate_domain() {
+    local domain=$1
+    if [[ ! $domain =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$ ]] && [ "$domain" != "localhost" ]; then
+        print_error "Invalid domain name format"
+        return 1
+    fi
+    return 0
+}
+
+# Function to check and install dependencies
+install_dependencies() {
+    local deps=("python3" "pip" "nodejs" "npm" "redis-server" "nginx" "mysql-server")
+    for dep in "${deps[@]}"; do
+        if ! command_exists $dep; then
+            print_message "Installing $dep..."
+            apt install -y $dep || {
+                print_error "Failed to install $dep"
+                exit 1
+            }
+        fi
+    done
+}
+
+# Function to backup existing installation
+backup_existing() {
+    if [ -d "$INSTALL_DIR" ]; then
+        local backup_dir="/opt/incontrol_backup_$(date +%Y%m%d_%H%M%S)"
+        print_warning "Existing installation found. Creating backup at $backup_dir"
+        mv "$INSTALL_DIR" "$backup_dir" || {
+            print_error "Failed to create backup"
+            exit 1
+        }
+    fi
+}
+
+# Trap errors
+trap 'print_error "An error occurred during installation. Check the error message above."; exit 1' ERR
 
 # Check if script is run as root
 if [ "$EUID" -ne 0 ]; then 
@@ -39,6 +134,49 @@ print_message "Checking system requirements..."
 if ! grep -q "Ubuntu" /etc/os-release; then
     print_error "This installer is only for Ubuntu systems"
     exit 1
+fi
+
+# Check minimum Ubuntu version
+ubuntu_version=$(lsb_release -rs)
+if (( $(echo "$ubuntu_version < 20.04" | bc -l) )); then
+    print_error "Ubuntu version 20.04 or higher is required"
+    exit 1
+fi
+
+# Check system resources
+check_resources
+
+# Check required ports
+check_ports
+
+# Backup existing installation
+backup_existing
+
+# Git repository setup
+print_message "Setting up Git repository..."
+REPO_URL="https://github.com/OnyxReborn/panelmain.git"
+INSTALL_DIR="/opt/incontrol"
+
+if [ ! -d "$INSTALL_DIR" ]; then
+    git clone $REPO_URL $INSTALL_DIR || {
+        print_error "Failed to clone repository"
+        exit 1
+    }
+    cd $INSTALL_DIR
+else
+    cd $INSTALL_DIR
+    if [ ! -d ".git" ]; then
+        git init
+        git remote add origin $REPO_URL
+    fi
+    git fetch origin || {
+        print_error "Failed to fetch from repository"
+        exit 1
+    }
+    git checkout -B main origin/main || {
+        print_error "Failed to checkout main branch"
+        exit 1
+    }
 fi
 
 # Install system dependencies
@@ -292,6 +430,53 @@ if [ "$enable_https" = "y" ]; then
     certbot --nginx -d $domain_name --non-interactive --agree-tos --email admin@$domain_name
 fi
 
+# Add cleanup function
+cleanup() {
+    if [ $? -ne 0 ]; then
+        print_error "Installation failed. Cleaning up..."
+        # Stop services
+        systemctl stop incontrol incontrol-worker incontrol-beat nginx 2>/dev/null || true
+        # Remove services
+        rm -f /etc/systemd/system/incontrol*.service 2>/dev/null || true
+        # Remove nginx config
+        rm -f /etc/nginx/sites-enabled/incontrol 2>/dev/null || true
+        rm -f /etc/nginx/sites-available/incontrol 2>/dev/null || true
+        # Reload systemd
+        systemctl daemon-reload
+        # Restart nginx
+        systemctl restart nginx
+        print_message "Cleanup complete. Please check the error messages above and try again."
+    fi
+}
+
+# Register cleanup function
+trap cleanup EXIT
+
+# Add service health checks at the end
+print_message "Performing final health checks..."
+
+# Check if services are running
+services=("redis-server" "incontrol" "incontrol-worker" "incontrol-beat" "nginx")
+for service in "${services[@]}"; do
+    if ! systemctl is-active --quiet $service; then
+        print_warning "Service $service is not running"
+        systemctl status $service
+    fi
+done
+
+# Test nginx configuration
+nginx -t || {
+    print_error "Nginx configuration test failed"
+    exit 1
+}
+
+# Test database connection
+source venv/bin/activate
+python manage.py check --database default || {
+    print_error "Database connection test failed"
+    exit 1
+}
+
 print_message "Installation complete!"
 echo "=================================================="
 echo "You can now access InControl Panel at: http://${domain_name}"
@@ -300,4 +485,14 @@ if [ "$enable_https" = "y" ]; then
 fi
 echo ""
 echo "Admin username: ${admin_user}"
-echo "==================================================" 
+echo ""
+echo "Important: Please save your credentials in a secure location"
+echo "=================================================="
+
+# Add final security recommendations
+print_message "Security Recommendations:"
+echo "1. Change the default MySQL root password"
+echo "2. Configure firewall rules (UFW)"
+echo "3. Set up regular backups"
+echo "4. Keep the system updated regularly"
+echo "5. Monitor the logs in /var/log/incontrol/" 

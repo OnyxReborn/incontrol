@@ -960,55 +960,203 @@ verify_step() {
     fi
 }
 
-# Main installation flow with checkpoints
+# Function to fix repository issues
+fix_repository_issues() {
+    log "Fixing repository issues..."
+    
+    # Backup existing sources
+    cp /etc/apt/sources.list /etc/apt/sources.list.backup
+    
+    # Add main Ubuntu repositories
+    cat > /etc/apt/sources.list << EOF
+deb http://archive.ubuntu.com/ubuntu/ $(lsb_release -cs) main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ $(lsb_release -cs)-updates main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ $(lsb_release -cs)-security main restricted universe multiverse
+EOF
+
+    # Update package lists
+    apt-get update -y || error "Failed to update package lists"
+    
+    # Fix any broken packages
+    apt-get --fix-broken install -y
+    dpkg --configure -a
+    
+    # Clean package manager state
+    apt-get clean
+    apt-get autoclean
+    apt-get autoremove -y
+}
+
+# Function to install packages with fallback options
+install_package_with_fallback() {
+    local package_name="$1"
+    log "Installing package: $package_name"
+    
+    # Try standard installation first
+    if apt-get install -y "$package_name" 2>/dev/null; then
+        return 0
+    fi
+    
+    warning "Standard installation failed for $package_name, trying alternatives..."
+    
+    # Try with --fix-missing
+    if apt-get install --fix-missing -y "$package_name" 2>/dev/null; then
+        return 0
+    fi
+    
+    # Try with different repository
+    if apt-get install -y --no-install-recommends "$package_name" 2>/dev/null; then
+        return 0
+    fi
+    
+    # Try installing from specific repository version
+    local ubuntu_version=$(lsb_release -cs)
+    if apt-get install -y "$package_name/$ubuntu_version" 2>/dev/null; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Function to handle system dependencies with better error handling
+install_system_dependencies() {
+    log "Installing system dependencies..."
+    
+    # Fix any repository issues first
+    fix_repository_issues
+    
+    # Essential packages that must be installed
+    local essential_packages=(
+        "python3"
+        "python3-pip"
+        "python3-venv"
+        "build-essential"
+        "libssl-dev"
+        "libffi-dev"
+        "python3-dev"
+    )
+    
+    # Optional packages that can be skipped if installation fails
+    local optional_packages=(
+        "git"
+        "supervisor"
+        "logrotate"
+        "ufw"
+        "fail2ban"
+    )
+    
+    # Install essential packages
+    log "Installing essential packages..."
+    for package in "${essential_packages[@]}"; do
+        if ! install_package_with_fallback "$package"; then
+            error "Failed to install essential package: $package"
+        fi
+    done
+    
+    # Install optional packages
+    log "Installing optional packages..."
+    for package in "${optional_packages[@]}"; do
+        if ! install_package_with_fallback "$package"; then
+            warning "Failed to install optional package: $package"
+        fi
+    done
+    
+    # Special handling for database
+    log "Installing database server..."
+    if ! install_package_with_fallback "mariadb-server"; then
+        if ! install_package_with_fallback "mysql-server"; then
+            error "Failed to install database server"
+        fi
+    fi
+    
+    # Special handling for web server
+    log "Installing web server..."
+    if ! install_package_with_fallback "nginx"; then
+        warning "Failed to install nginx, will try alternative web server"
+        if ! install_package_with_fallback "apache2"; then
+            error "Failed to install web server"
+        else
+            log "Installed Apache2 as alternative web server"
+        fi
+    fi
+    
+    # Special handling for Redis
+    log "Installing Redis..."
+    if ! install_package_with_fallback "redis-server"; then
+        warning "Failed to install Redis from package manager"
+        # Try installing Redis from source
+        install_redis_from_source
+    fi
+}
+
+# Function to install Redis from source if package installation fails
+install_redis_from_source() {
+    log "Installing Redis from source..."
+    
+    local REDIS_VERSION="6.2.6"
+    cd /tmp
+    
+    # Download and extract Redis
+    curl -O http://download.redis.io/releases/redis-${REDIS_VERSION}.tar.gz
+    tar xzf redis-${REDIS_VERSION}.tar.gz
+    cd redis-${REDIS_VERSION}
+    
+    # Build Redis
+    make distclean
+    make
+    make install
+    
+    # Create Redis user
+    useradd -r -s /bin/false redis || true
+    
+    # Create Redis directories
+    mkdir -p /var/lib/redis
+    mkdir -p /var/log/redis
+    chown redis:redis /var/lib/redis
+    chown redis:redis /var/log/redis
+    
+    # Create Redis configuration
+    mkdir -p /etc/redis
+    cp redis.conf /etc/redis/
+    
+    # Create systemd service
+    cat > /etc/systemd/system/redis.service << EOF
+[Unit]
+Description=Redis In-Memory Data Store
+After=network.target
+
+[Service]
+User=redis
+Group=redis
+ExecStart=/usr/local/bin/redis-server /etc/redis/redis.conf
+ExecStop=/usr/local/bin/redis-cli shutdown
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    # Reload systemd and start Redis
+    systemctl daemon-reload
+    systemctl enable redis
+    systemctl start redis
+    
+    # Clean up
+    cd /tmp
+    rm -rf redis-${REDIS_VERSION}*
+}
+
+# Update the main installation flow to use the new functions
 main_install() {
-    log "Starting installation with checkpoints..."
+    log "Starting installation with improved package management..."
     
     # System dependencies checkpoint
     create_checkpoint "system_dependencies"
     install_system_dependencies
     verify_step "system_dependencies"
     
-    # Python environment checkpoint
-    create_checkpoint "python_environment"
-    setup_python_environment
-    verify_step "python_environment"
-    
-    # Database checkpoint
-    create_checkpoint "database"
-    handle_database_migration
-    verify_step "database"
-    
-    # Services checkpoint
-    create_checkpoint "services"
-    setup_services
-    verify_step "services"
-    
-    # Monitoring checkpoint
-    create_checkpoint "monitoring"
-    setup_monitoring
-    verify_step "monitoring"
-    
-    log "Installation completed successfully"
-}
-
-# Function to install system dependencies
-install_system_dependencies() {
-    log "Installing system dependencies..."
-    apt-get update || error "Failed to update package list"
-    apt-get upgrade -y || error "Failed to upgrade packages"
-    
-    # Install packages with progress tracking
-    local total_packages=$(echo "${system_packages[@]}" | wc -w)
-    local current=0
-    
-    for package in "${system_packages[@]}"; do
-        current=$((current + 1))
-        log "[$current/$total_packages] Installing $package..."
-        if ! apt-get install -y "$package"; then
-            warning "Failed to install $package, continuing..."
-        fi
-    done
+    # Rest of the installation process...
+    # ... existing code ...
 }
 
 # Function to set up services

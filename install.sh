@@ -157,27 +157,76 @@ print_message "Setting up Git repository..."
 REPO_URL="https://github.com/OnyxReborn/panelmain.git"
 INSTALL_DIR="/opt/incontrol"
 
-if [ ! -d "$INSTALL_DIR" ]; then
-    git clone $REPO_URL $INSTALL_DIR || {
-        print_error "Failed to clone repository"
-        exit 1
-    }
-    cd $INSTALL_DIR
-else
-    cd $INSTALL_DIR
+# Function to handle git setup
+setup_git_repo() {
+    print_message "Configuring Git repository..."
+    
+    # Ensure we're in the right directory
+    cd "$INSTALL_DIR"
+    
+    # Initialize if needed
     if [ ! -d ".git" ]; then
         git init
-        git remote add origin $REPO_URL
+        git remote add origin "$REPO_URL"
     fi
-    git fetch origin || {
+    
+    # Remove any existing remotes and re-add
+    git remote remove origin 2>/dev/null || true
+    git remote add origin "$REPO_URL"
+    
+    # Fetch all branches and tags
+    print_message "Fetching repository data..."
+    git fetch --all --tags --force || {
         print_error "Failed to fetch from repository"
         exit 1
     }
-    git checkout -B main origin/main || {
-        print_error "Failed to checkout main branch"
+    
+    # Try different methods to get to main branch
+    if git rev-parse --verify origin/main >/dev/null 2>&1; then
+        print_message "Checking out main branch..."
+        git reset --hard origin/main || {
+            print_error "Failed to reset to origin/main"
+            exit 1
+        }
+        git checkout -B main || {
+            print_error "Failed to create main branch"
+            exit 1
+        }
+    else
+        print_error "Main branch not found in repository"
         exit 1
+    fi
+    
+    # Set upstream and HEAD
+    git branch --set-upstream-to=origin/main main || true
+    git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main || true
+}
+
+# Main repository setup
+if [ ! -d "$INSTALL_DIR" ]; then
+    print_message "Cloning fresh repository..."
+    git clone --depth 1 -b main "$REPO_URL" "$INSTALL_DIR" || {
+        print_message "Shallow clone failed, attempting full clone..."
+        git clone "$REPO_URL" "$INSTALL_DIR" || {
+            print_error "Failed to clone repository"
+            exit 1
+        }
     }
+    cd "$INSTALL_DIR"
+    setup_git_repo
+else
+    cd "$INSTALL_DIR"
+    setup_git_repo
 fi
+
+# Verify branch setup
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$current_branch" != "main" ]; then
+    print_error "Failed to set up Git branch correctly"
+    exit 1
+fi
+
+print_message "Git repository setup completed successfully"
 
 # Install system dependencies
 print_message "Installing system dependencies..."

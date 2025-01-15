@@ -1,0 +1,21 @@
+[Unit]
+Description=InControl Daphne Server
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=incontrol
+Group=incontrol
+WorkingDirectory=/opt/incontrol
+Environment=DJANGO_SETTINGS_MODULE=incontrol.settings
+Environment=PATH=/opt/incontrol/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/incontrol/venv/bin/daphne -b 127.0.0.1 -p 8001 incontrol.asgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=always
+
+[Install]
+WantedBy=multi-user.target 

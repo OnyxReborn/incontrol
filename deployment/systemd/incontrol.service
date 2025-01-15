@@ -1,0 +1,21 @@
+[Unit]
+Description=InControl Server Management Panel
+After=network.target mysql.service redis.service
+Wants=mysql.service redis.service
+
+[Service]
+Type=simple
+User=incontrol
+Group=incontrol
+WorkingDirectory=/opt/incontrol
+Environment=DJANGO_SETTINGS_MODULE=incontrol.settings
+Environment=PATH=/opt/incontrol/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/incontrol/venv/bin/gunicorn incontrol.wsgi:application --workers 4 --bind 127.0.0.1:8000
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=always
+
+[Install]
+WantedBy=multi-user.target 

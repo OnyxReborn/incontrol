@@ -1,0 +1,88 @@
+groups:
+  - name: incontrol_alerts
+    rules:
+      # System Alerts
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High CPU usage (instance {{ $labels.instance }})
+          description: CPU usage is above 80% for 5 minutes
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High memory usage (instance {{ $labels.instance }})
+          description: Memory usage is above 85% for 5 minutes
+
+      - alert: LowDiskSpace
+        expr: (node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Low disk space (instance {{ $labels.instance }})
+          description: Disk usage is above 85% for 5 minutes
+
+      # Application Alerts
+      - alert: HighResponseTime
+        expr: rate(django_http_requests_latency_seconds_sum[5m]) / rate(django_http_requests_latency_seconds_count[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High response time (instance {{ $labels.instance }})
+          description: Average response time is above 1 second for 5 minutes
+
+      - alert: HighErrorRate
+        expr: rate(django_http_responses_total_by_status_total{status=~"5.."}[5m]) / rate(django_http_responses_total_by_status_total[5m]) * 100 > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: High error rate (instance {{ $labels.instance }})
+          description: HTTP 5xx error rate is above 5% for 5 minutes
+
+      # Database Alerts
+      - alert: MySQLDown
+        expr: mysql_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: MySQL is down (instance {{ $labels.instance }})
+          description: MySQL instance is down
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis is down (instance {{ $labels.instance }})
+          description: Redis instance is down
+
+      # Backup Alerts
+      - alert: BackupFailed
+        expr: incontrol_backup_success == 0
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: Backup failed (instance {{ $labels.instance }})
+          description: Last backup attempt failed
+
+      # Security Alerts
+      - alert: HighLoginFailures
+        expr: rate(django_login_failures_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High login failures (instance {{ $labels.instance }})
+          description: More than 10 login failures per minute 

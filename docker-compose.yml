@@ -12,12 +12,23 @@ services:
       - "9093:9093"    # AlertManager
       - "9100:9100"    # Node Exporter
     volumes:
-      - ./install.sh:/home/testuser/install.sh
-    privileged: true   # Needed for systemd services
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - type: bind
+        source: ./install.sh
+        target: /home/testuser/install.sh
+      - type: bind
+        source: ./requirements.txt
+        target: /home/testuser/requirements.txt
+    privileged: true
     cap_add:
       - SYS_ADMIN
     security_opt:
       - seccomp:unconfined
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+    command: sh -c "chmod +x /home/testuser/install.sh && dos2unix /home/testuser/install.sh && /usr/sbin/sshd -D"
 
 volumes:
   incontrol_data:

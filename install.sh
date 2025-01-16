@@ -81,8 +81,17 @@ EOF
 # Function to install Python and dependencies
 setup_python() {
     log "Setting up Python environment..."
+    
+    # Remove conflicting packages first
+    apt-get remove -y libmysqlclient-dev || true
+    apt-get autoremove -y
+    
+    # Install Python and build dependencies
     apt-get install -y python3 python3-pip python3-venv build-essential python3-dev \
-        default-libmysqlclient-dev pkg-config libmariadb-dev libssl-dev libffi-dev
+        pkg-config libssl-dev libffi-dev
+
+    # Install MariaDB development files specifically
+    apt-get install -y libmariadb-dev
 
     # Create and activate virtual environment
     python3 -m venv /opt/incontrol/venv

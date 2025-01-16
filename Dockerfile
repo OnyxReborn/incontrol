@@ -2,6 +2,7 @@ FROM ubuntu:22.04
 
 # Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
+ENV container docker
 
 # Install systemd and other requirements
 RUN apt-get update && apt-get install -y \
@@ -33,26 +34,32 @@ RUN useradd -m -s /bin/bash testuser && \
     echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # Configure SSH
-RUN mkdir /var/run/sshd && \
+RUN mkdir -p /var/run/sshd && \
     echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
-    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
+    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
+    rm -f /run/nologin && \
+    rm -f /etc/nologin && \
+    systemctl enable ssh
 
 # Create working directory
 WORKDIR /home/testuser
 
-# Copy installation files
+# Copy and process installation files
 COPY install.sh requirements.txt ./
 RUN dos2unix install.sh && \
+    dos2unix requirements.txt && \
     chmod +x install.sh && \
-    chown testuser:testuser install.sh requirements.txt
+    chown -R testuser:testuser /home/testuser
 
-# Enable SSH service
-RUN systemctl enable ssh
+# Create startup script
+RUN echo '#!/bin/bash\nrm -f /run/nologin /etc/nologin\nexec /lib/systemd/systemd' > /startup.sh && \
+    chmod +x /startup.sh
 
 VOLUME [ "/sys/fs/cgroup" ]
 
 # Expose ports
 EXPOSE 22 80 443 8000 9090 9093 9100
 
-# Start systemd
-CMD ["/lib/systemd/systemd"] 
+STOPSIGNAL SIGRTMIN+3
+
+CMD ["/startup.sh"] 

@@ -38,7 +38,10 @@ install_nodejs() {
     log "Installing Node.js..."
     curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
     apt-get install -y nodejs
-    npm install -g npm@latest
+    # Force install npm and ignore engine requirements
+    npm config set engine-strict false
+    npm install -g npm@10.2.4 --force
+    npm config set ignore-engines true
 }
 
 # Function to install and configure MySQL/MariaDB

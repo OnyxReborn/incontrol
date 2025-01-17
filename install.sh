@@ -23,10 +23,58 @@ warning() {
     echo -e "${YELLOW}[WARNING] $1${NC}"
 }
 
+# Function to generate secure passwords
+generate_password() {
+    tr -dc 'A-Za-z0-9!#$%&()*+,-./:;<=>?@[\]^_`{|}~' </dev/urandom | head -c 32
+}
+
+# Function to set up initial configuration
+setup_initial_config() {
+    log "Setting up initial configuration..."
+    
+    # Create .env file directory
+    mkdir -p /opt/incontrol
+    
+    # Check if DOMAIN is set in environment
+    if [ -z "${DOMAIN}" ]; then
+        # If running in Docker, use a default domain for testing
+        if [ -f "/.dockerenv" ]; then
+            DOMAIN="localhost"
+            warning "Running in Docker environment. Using default domain: ${DOMAIN}"
+        else
+            # Prompt for domain if not in Docker
+            read -p "Enter your domain name (e.g., example.com): " DOMAIN
+            if [ -z "${DOMAIN}" ]; then
+                error "Domain name cannot be empty"
+            fi
+        fi
+    fi
+    
+    # Generate passwords if not set
+    DB_PASSWORD=${DB_PASSWORD:-$(generate_password)}
+    REDIS_PASSWORD=${REDIS_PASSWORD:-$(generate_password)}
+    MAIL_DB_PASSWORD=${MAIL_DB_PASSWORD:-$(generate_password)}
+    
+    # Create .env file
+    cat > /opt/incontrol/.env << EOF
+DOMAIN=${DOMAIN}
+DB_PASSWORD=${DB_PASSWORD}
+REDIS_PASSWORD=${REDIS_PASSWORD}
+MAIL_DB_PASSWORD=${MAIL_DB_PASSWORD}
+DJANGO_SECRET_KEY=$(generate_password)
+EOF
+
+    # Set proper permissions
+    chmod 600 /opt/incontrol/.env
+}
+
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then 
     error "Please run as root (sudo ./install.sh)"
 fi
+
+# Setup initial configuration before proceeding
+setup_initial_config
 
 # Check Ubuntu version
 if ! grep -q "Ubuntu" /etc/os-release; then

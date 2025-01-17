@@ -36,12 +36,15 @@ install_dependencies() {
         git \
         make \
         gcc \
+        pkg-config \
         openssl \
         libssl-dev \
         python3-dev \
         python3-pip \
         python3-venv \
         libmariadb-dev \
+        libmariadb-dev-compat \
+        mariadb-client \
         nginx \
         mariadb-server \
         redis-server \
@@ -175,27 +178,53 @@ setup_database() {
 setup_application() {
     log "Setting up application..."
     
+    # Create destination directory if it doesn't exist
+    mkdir -p /opt/incontrol
+    
     # Copy application files
     if [ ! -d "incontrol" ]; then
         error "incontrol directory not found"
     fi
     
-    # Create destination directory if it doesn't exist
-    mkdir -p /opt/incontrol
+    # Copy all Python files from incontrol directory
+    cp -r incontrol/* /opt/incontrol/
     
-    # Copy files individually to ensure proper error handling
-    cp incontrol/settings.py /opt/incontrol/
-    cp incontrol/urls.py /opt/incontrol/
-    cp incontrol/celery.py /opt/incontrol/
-    cp incontrol/asgi.py /opt/incontrol/
-    cp incontrol/wsgi.py /opt/incontrol/
-    cp incontrol/__init__.py /opt/incontrol/
+    # Create manage.py file
+    cat > /opt/incontrol/manage.py << 'EOF'
+#!/usr/bin/env python
+"""Django's command-line utility for administrative tasks."""
+import os
+import sys
+
+def main():
+    """Run administrative tasks."""
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'incontrol.settings')
+    try:
+        from django.core.management import execute_from_command_line
+    except ImportError as exc:
+        raise ImportError(
+            "Couldn't import Django. Are you sure it's installed?"
+        ) from exc
+    execute_from_command_line(sys.argv)
+
+if __name__ == '__main__':
+    main()
+EOF
+
+    # Make manage.py executable
+    chmod +x /opt/incontrol/manage.py
     
     # Set proper permissions
     chown -R www-data:www-data /opt/incontrol
     
     # Set up virtual environment and install dependencies
     setup_python
+    
+    # Create static and media directories
+    mkdir -p /opt/incontrol/static
+    mkdir -p /opt/incontrol/media
+    chown -R www-data:www-data /opt/incontrol/static
+    chown -R www-data:www-data /opt/incontrol/media
     
     # Apply database migrations
     cd /opt/incontrol

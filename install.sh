@@ -181,38 +181,28 @@ setup_application() {
     # Create destination directory if it doesn't exist
     mkdir -p /opt/incontrol
     
-    # Copy application files
+    # Copy Django project files
     if [ ! -d "incontrol" ]; then
-        error "incontrol directory not found"
+        error "incontrol directory not found in $(pwd)"
     fi
     
-    # Copy all Python files from incontrol directory
-    cp -r incontrol/ /opt/incontrol/
+    # Create Python package directory
+    mkdir -p /opt/incontrol/incontrol
     
-    # Create manage.py file
-    cat > /opt/incontrol/manage.py << 'EOF'
-#!/usr/bin/env python
-"""Django's command-line utility for administrative tasks."""
-import os
-import sys
-
-def main():
-    """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'incontrol.settings')
-    try:
-        from django.core.management import execute_from_command_line
-    except ImportError as exc:
-        raise ImportError(
-            "Couldn't import Django. Are you sure it's installed?"
-        ) from exc
-    execute_from_command_line(sys.argv)
-
-if __name__ == '__main__':
-    main()
-EOF
-
-    # Make manage.py executable
+    # Copy Django project files
+    cp incontrol/*.py /opt/incontrol/incontrol/
+    touch /opt/incontrol/incontrol/__init__.py
+    
+    # Copy manage.py to the project root
+    cp manage.py /opt/incontrol/
     chmod +x /opt/incontrol/manage.py
+    
+    # Copy application modules
+    for dir in core accounts dns filemanager mail processmanager security system webserver; do
+        if [ -d "$dir" ]; then
+            cp -r "$dir" /opt/incontrol/
+        fi
+    done
     
     # Set proper permissions
     chown -R www-data:www-data /opt/incontrol

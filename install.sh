@@ -5,11 +5,20 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Logging functions
 log() {
     printf "${GREEN}[%s] %s${NC}\n" "$(date +'%Y-%m-%d %H:%M:%S')" "$1"
+}
+
+log_info() {
+    printf "${BLUE}[%s] %s${NC}\n" "$(date +'%Y-%m-%d %H:%M:%S')" "$1"
+}
+
+log_success() {
+    printf "${GREEN}[%s] ✓ %s${NC}\n" "$(date +'%Y-%m-%d %H:%M:%S')" "$1"
 }
 
 error() {
@@ -176,7 +185,7 @@ setup_database() {
 
 # Function to setup application
 setup_application() {
-    log_info "Setting up application..."
+    log "Setting up application..."
     
     # Create destination directory if it doesn't exist
     mkdir -p /opt/incontrol

@@ -176,17 +176,12 @@ setup_database() {
 
 # Function to setup application
 setup_application() {
-    log "Setting up application..."
+    log_info "Setting up application..."
     
     # Create destination directory if it doesn't exist
     mkdir -p /opt/incontrol
     
-    # Copy Django project files
-    if [ ! -d "incontrol" ]; then
-        error "incontrol directory not found in $(pwd)"
-    fi
-    
-    # Create Python package directory
+    # Create Python package structure
     mkdir -p /opt/incontrol/incontrol
     
     # Copy Django project files
@@ -197,30 +192,22 @@ setup_application() {
     cp manage.py /opt/incontrol/
     chmod +x /opt/incontrol/manage.py
     
-    # Copy application modules
+    # Copy application modules into the incontrol package
     for dir in core accounts dns filemanager mail processmanager security system webserver; do
         if [ -d "$dir" ]; then
-            cp -r "$dir" /opt/incontrol/
+            cp -r "$dir" /opt/incontrol/incontrol/
         fi
     done
-    
-    # Set proper permissions
-    chown -R www-data:www-data /opt/incontrol
-    
-    # Set up virtual environment and install dependencies
-    setup_python
     
     # Create static and media directories
     mkdir -p /opt/incontrol/static
     mkdir -p /opt/incontrol/media
-    chown -R www-data:www-data /opt/incontrol/static
-    chown -R www-data:www-data /opt/incontrol/media
     
-    # Apply database migrations
-    cd /opt/incontrol
-    . venv/bin/activate
-    python manage.py migrate
-    python manage.py collectstatic --noinput
+    # Set proper permissions
+    chown -R www-data:www-data /opt/incontrol
+    chmod -R 755 /opt/incontrol
+    
+    log_success "Application setup completed"
 }
 
 # Function to setup services

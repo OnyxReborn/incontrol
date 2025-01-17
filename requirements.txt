@@ -4,6 +4,10 @@ djangorestframework>=3.14.0
 django-cors-headers>=4.0.0
 django-filter>=23.0
 
+# Channels for WebSocket support
+channels>=4.0.0
+channels-redis>=4.1.0
+
 # ASGI Server
 gunicorn>=21.0.0
 uvicorn[standard]>=0.22.0

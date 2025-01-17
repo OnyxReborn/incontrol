@@ -9,21 +9,21 @@ NC='\033[0m'
 
 # Logging functions
 log() {
-    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+    printf "${GREEN}[%s] %s${NC}\n" "$(date +'%Y-%m-%d %H:%M:%S')" "$1"
 }
 
 error() {
-    echo -e "${RED}[ERROR] $1${NC}" >&2
+    printf "${RED}[ERROR] %s${NC}\n" "$1" >&2
     exit 1
 }
 
 warning() {
-    echo -e "${YELLOW}[WARNING] $1${NC}"
+    printf "${YELLOW}[WARNING] %s${NC}\n" "$1"
 }
 
 # Function to generate secure passwords
 generate_password() {
-    tr -dc 'A-Za-z0-9!#$%&()*+,-./:;<=>?@[\]^_`{|}~' </dev/urandom | head -c 32
+    < /dev/urandom tr -dc 'A-Za-z0-9!#$%&()*+,-./:;<=>?@[\]^_`{|}~' | head -c 32
 }
 
 # Function to install system dependencies
@@ -71,7 +71,8 @@ setup_initial_config() {
             warning "Running in Docker environment. Using default domain: ${DOMAIN}"
         else
             # Prompt for domain if not in Docker
-            read -p "Enter your domain name (e.g., example.com): " DOMAIN
+            printf "Enter your domain name (e.g., example.com): "
+            read -r DOMAIN
             if [ -z "${DOMAIN}" ]; then
                 error "Domain name cannot be empty"
             fi
@@ -84,7 +85,7 @@ setup_initial_config() {
     MAIL_DB_PASSWORD=${MAIL_DB_PASSWORD:-$(generate_password)}
     
     # Create .env file
-    cat > /opt/incontrol/.env << EOF
+    cat > /opt/incontrol/.env << 'EOF'
 DOMAIN=${DOMAIN}
 DB_PASSWORD=${DB_PASSWORD}
 REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -131,7 +132,7 @@ create_directories() {
 setup_python() {
     log "Setting up Python environment..."
     python3 -m venv /opt/incontrol/venv
-    source /opt/incontrol/venv/bin/activate
+    . /opt/incontrol/venv/bin/activate
     pip install --upgrade pip setuptools wheel
     pip install -r requirements.txt
 }
@@ -163,7 +164,7 @@ setup_application() {
     
     # Apply database migrations
     cd /opt/incontrol
-    source venv/bin/activate
+    . venv/bin/activate
     python manage.py migrate
     python manage.py collectstatic --noinput
 }
@@ -182,7 +183,7 @@ setup_services() {
 }
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then 
+if [ "$(id -u)" -ne 0 ]; then 
     error "Please run as root (sudo ./install.sh)"
 fi
 

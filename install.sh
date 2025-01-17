@@ -187,7 +187,7 @@ setup_application() {
     fi
     
     # Copy all Python files from incontrol directory
-    cp -r incontrol/* /opt/incontrol/
+    cp -r incontrol/ /opt/incontrol/
     
     # Create manage.py file
     cat > /opt/incontrol/manage.py << 'EOF'

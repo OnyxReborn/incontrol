@@ -28,6 +28,35 @@ generate_password() {
     tr -dc 'A-Za-z0-9!#$%&()*+,-./:;<=>?@[\]^_`{|}~' </dev/urandom | head -c 32
 }
 
+# Function to install system dependencies
+install_dependencies() {
+    log "Installing system dependencies..."
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        curl \
+        wget \
+        git \
+        make \
+        gcc \
+        openssl \
+        libssl-dev \
+        python3-dev \
+        python3-pip \
+        python3-venv \
+        libmariadb-dev \
+        nginx \
+        mariadb-server \
+        redis-server \
+        postfix \
+        dovecot-core \
+        bind9 \
+        prometheus \
+        node-exporter \
+        alertmanager \
+        fail2ban \
+        certbot
+}
+
 # Function to set up initial configuration
 setup_initial_config() {
     log "Setting up initial configuration..."
@@ -68,24 +97,6 @@ EOF
     chmod 600 /opt/incontrol/.env
 }
 
-# Function to install system dependencies
-install_dependencies() {
-    log "Installing system dependencies..."
-    apt-get update
-    apt-get install -y \
-        curl \
-        wget \
-        git \
-        make \
-        gcc \
-        openssl \
-        libssl-dev \
-        python3-dev \
-        python3-pip \
-        python3-venv \
-        libmariadb-dev
-}
-
 # Function to create required directories
 create_directories() {
     log "Creating required directories..."
@@ -98,7 +109,11 @@ create_directories() {
     
     # Service-specific directories
     mkdir -p /etc/nginx/ssl
+    mkdir -p /etc/nginx/sites-available
+    mkdir -p /etc/nginx/sites-enabled
     mkdir -p /var/mail/vhosts
+    mkdir -p /etc/postfix
+    mkdir -p /etc/dovecot
     mkdir -p /etc/bind/zones
     mkdir -p /var/log/named
     mkdir -p /var/cache/bind
@@ -106,29 +121,43 @@ create_directories() {
     mkdir -p /etc/alertmanager
     mkdir -p /var/lib/prometheus
     mkdir -p /var/lib/alertmanager
+    mkdir -p /etc/fail2ban
+    
+    # Set proper permissions
+    chown -R www-data:www-data /var/log/incontrol
+    chown -R www-data:www-data /var/lib/incontrol
 }
 
 # Function to copy configuration files
 copy_configs() {
     log "Copying configuration files..."
     
-    # Create necessary directories first
-    mkdir -p /etc/nginx/sites-available
-    mkdir -p /etc/nginx/sites-enabled
-    mkdir -p /etc/postfix
-    mkdir -p /etc/dovecot
-    mkdir -p /etc/bind/zones
-    mkdir -p /etc/prometheus
-    mkdir -p /etc/alertmanager
-    mkdir -p /etc/fail2ban
-    
     # Copy configuration files from deployment directory
-    cp -r deployment/nginx/* /etc/nginx/
-    cp -r deployment/mail/* /etc/postfix/
-    cp -r deployment/bind/* /etc/bind/
-    cp -r deployment/prometheus/* /etc/prometheus/
-    cp -r deployment/alertmanager/* /etc/alertmanager/
-    cp -r deployment/fail2ban/* /etc/fail2ban/
+    cp -r deployment/nginx/* /etc/nginx/ || warning "No Nginx configs found"
+    cp -r deployment/mail/* /etc/postfix/ || warning "No mail configs found"
+    cp -r deployment/bind/* /etc/bind/ || warning "No BIND configs found"
+    cp -r deployment/prometheus/* /etc/prometheus/ || warning "No Prometheus configs found"
+    cp -r deployment/alertmanager/* /etc/alertmanager/ || warning "No Alertmanager configs found"
+    cp -r deployment/fail2ban/* /etc/fail2ban/ || warning "No Fail2ban configs found"
+    cp -r deployment/systemd/*.service /etc/systemd/system/ || warning "No systemd service files found"
+    
+    # Reload systemd
+    systemctl daemon-reload
+}
+
+# Function to setup database
+setup_database() {
+    log "Setting up database..."
+    
+    # Start MariaDB if not running
+    systemctl start mariadb
+    systemctl enable mariadb
+    
+    # Create database and user
+    mysql -e "CREATE DATABASE IF NOT EXISTS incontrol CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    mysql -e "CREATE USER IF NOT EXISTS 'incontrol'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';"
+    mysql -e "GRANT ALL PRIVILEGES ON incontrol.* TO 'incontrol'@'localhost';"
+    mysql -e "FLUSH PRIVILEGES;"
 }
 
 # Check if running as root
@@ -141,16 +170,22 @@ if ! grep -q "Ubuntu" /etc/os-release; then
     error "This script requires Ubuntu OS"
 fi
 
-# Setup initial configuration
-setup_initial_config
+log "Starting InControl installation..."
 
 # Install dependencies first
 install_dependencies
 
+# Setup initial configuration
+setup_initial_config
+
 # Create required directories
 create_directories
+
+# Setup database
+setup_database
 
 # Copy configuration files
 copy_configs
 
-# Rest of your installation script... 
+log "Installation completed successfully!"
+log "You can find your credentials in /opt/incontrol/.env" 

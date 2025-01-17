@@ -49,11 +49,30 @@ install_dependencies() {
         dovecot-core \
         bind9 \
         prometheus \
-        node-exporter \
-        alertmanager \
         fail2ban \
         certbot \
         python3-certbot-nginx
+
+    # Install Node Exporter
+    log "Installing Node Exporter..."
+    NODE_EXPORTER_VERSION="1.7.0"
+    wget https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz
+    tar xvf node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz
+    mv node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64/node_exporter /usr/local/bin/
+    rm -rf node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64*
+    useradd -rs /bin/false node_exporter || true
+
+    # Install Alertmanager
+    log "Installing Alertmanager..."
+    ALERTMANAGER_VERSION="0.26.0"
+    wget https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/alertmanager-${ALERTMANAGER_VERSION}.linux-amd64.tar.gz
+    tar xvf alertmanager-${ALERTMANAGER_VERSION}.linux-amd64.tar.gz
+    mv alertmanager-${ALERTMANAGER_VERSION}.linux-amd64/alertmanager /usr/local/bin/
+    mv alertmanager-${ALERTMANAGER_VERSION}.linux-amd64/amtool /usr/local/bin/
+    rm -rf alertmanager-${ALERTMANAGER_VERSION}.linux-amd64*
+    useradd -rs /bin/false alertmanager || true
+    mkdir -p /etc/alertmanager
+    chown alertmanager:alertmanager /etc/alertmanager
 }
 
 # Function to set up initial configuration

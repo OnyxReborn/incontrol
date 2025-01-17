@@ -1,21 +1,37 @@
 [Unit]
 Description=InControl Celery Worker
-After=network.target redis.service
-Wants=redis.service
+Documentation=https://github.com/yourusername/incontrol
+After=network.target mariadb.service redis.service
+Requires=redis.service mariadb.service
 
 [Service]
-Type=simple
 User=incontrol
 Group=incontrol
 WorkingDirectory=/opt/incontrol
-Environment=DJANGO_SETTINGS_MODULE=incontrol.settings
-Environment=PATH=/opt/incontrol/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/opt/incontrol/venv/bin/celery -A incontrol worker --loglevel=info
-ExecReload=/bin/kill -s HUP $MAINPID
-KillMode=mixed
-TimeoutStopSec=5
+ExecStart=/opt/incontrol/venv/bin/celery -A incontrol worker \
+    --loglevel=info \
+    --concurrency=4 \
+    --max-tasks-per-child=1000 \
+    --time-limit=3600 \
+    --soft-time-limit=3300
+
+# Security
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/incontrol
 PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
 Restart=always
+RestartSec=5
+TimeoutStopSec=30s
 
 [Install]
 WantedBy=multi-user.target

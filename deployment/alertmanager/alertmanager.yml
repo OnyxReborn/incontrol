@@ -1,22 +1,20 @@
 global:
   resolve_timeout: 5m
+  smtp_smarthost: 'localhost:25'
+  smtp_from: 'alertmanager@${DOMAIN}'
+  smtp_require_tls: false
 
 route:
-  group_by: ['alertname', 'instance']
+  group_by: ['alertname', 'instance', 'severity']
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
-  receiver: 'email'
+  receiver: 'admin-mail'
 
 receivers:
-- name: 'email'
+- name: 'admin-mail'
   email_configs:
-  - to: 'admin@example.com'
-    from: 'alertmanager@example.com'
-    smarthost: 'smtp.example.com:587'
-    auth_username: 'alertmanager@example.com'
-    auth_identity: 'alertmanager@example.com'
-    auth_password: 'your_password'
+  - to: 'admin@${DOMAIN}'
     send_resolved: true
 
 inhibit_rules:

@@ -1,0 +1,34 @@
+[DEFAULT]
+bantime = 1h
+findtime = 10m
+maxretry = 5
+banaction = ufw
+backend = auto
+
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+
+[postfix]
+enabled = true
+port = smtp,submission
+filter = postfix
+logpath = /var/log/mail.log
+maxretry = 5
+
+[dovecot]
+enabled = true
+port = imap,imaps,pop3,pop3s
+filter = dovecot
+logpath = /var/log/mail.log
+maxretry = 5
+
+[nginx-http-auth]
+enabled = true
+filter = nginx-http-auth
+port = http,https
+logpath = /var/log/nginx/error.log
+maxretry = 3 

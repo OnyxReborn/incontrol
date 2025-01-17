@@ -1,0 +1,19 @@
+$TTL    86400
+@       IN      SOA     ns1.example.com. admin.example.com. (
+                        2024011701      ; Serial
+                        3600            ; Refresh
+                        1800            ; Retry
+                        604800          ; Expire
+                        86400           ; Minimum TTL
+)
+
+; Nameservers
+@       IN      NS      ns1.example.com.
+@       IN      NS      ns2.example.com.
+
+; PTR Records
+1       IN      PTR     example.com.        ; Main domain
+1       IN      PTR     www.example.com.    ; Web server
+1       IN      PTR     mail.example.com.   ; Mail server
+2       IN      PTR     ns1.example.com.    ; Primary NS
+3       IN      PTR     ns2.example.com.    ; Secondary NS 

@@ -27,18 +27,21 @@ A comprehensive web-based control panel for managing Linux servers, built with D
 ## Installation
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/OnyxReborn/panelmain.git
 cd panelmain
 ```
 
-2. Run the installation script:
+1. Run the installation script:
+
 ```bash
 chmod +x install.sh
 sudo ./install.sh
 ```
 
 The installation script will:
+
 - Install system dependencies
 - Set up Python virtual environment
 - Install Python packages
@@ -52,6 +55,7 @@ The installation script will:
 ## Development Setup
 
 1. Backend setup:
+
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: .\venv\Scripts\activate
@@ -60,14 +64,16 @@ python manage.py migrate
 python manage.py createsuperuser
 ```
 
-2. Frontend setup:
+1. Frontend setup:
+
 ```bash
 cd frontend
 npm install
 npm start
 ```
 
-3. Start development servers:
+1. Start development servers:
+
 ```bash
 # Terminal 1 - Django
 python manage.py runserver
@@ -85,12 +91,14 @@ daphne incontrol.asgi:application
 ## Production Deployment
 
 1. Set up environment variables:
+
 ```bash
 cp .env.example .env
 # Edit .env with your production settings
 ```
 
-2. Configure Nginx:
+1. Configure Nginx:
+
 ```bash
 sudo cp deployment/nginx/incontrol.conf /etc/nginx/sites-available/
 sudo ln -s /etc/nginx/sites-available/incontrol.conf /etc/nginx/sites-enabled/
@@ -98,7 +106,8 @@ sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-3. Start services:
+1. Start services:
+
 ```bash
 sudo systemctl start incontrol
 sudo systemctl start incontrol-worker
@@ -129,4 +138,4 @@ API documentation is available at `/api/docs/` when running the server.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.

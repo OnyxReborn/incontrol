@@ -1,0 +1,23 @@
+# Database driver
+driver = mysql
+
+# Database connection
+connect = host=localhost dbname=mail user=mail_admin password=${MAIL_DB_PASSWORD}
+
+# Default password scheme
+default_pass_scheme = SHA512-CRYPT
+
+# Password query
+password_query = SELECT email as user, password \
+                FROM virtual_users WHERE email = '%u'
+
+# User query
+user_query = SELECT concat('/var/mail/vhosts/', domain, '/', local_part) as home, \
+                   concat('maildir:/var/mail/vhosts/', domain, '/', local_part) as mail, \
+                   150 as uid, \
+                   8 as gid \
+            FROM virtual_users \
+            WHERE email = '%u'
+
+# Iterate users
+iterate_query = SELECT email as user FROM virtual_users 

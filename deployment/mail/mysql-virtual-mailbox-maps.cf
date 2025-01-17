@@ -1,0 +1,5 @@
+user = mail_admin
+password = ${MAIL_DB_PASSWORD}
+hosts = localhost
+dbname = mail
+query = SELECT CONCAT(domain, '/', local_part) AS maildir FROM virtual_users WHERE email='%s' AND active = 1 

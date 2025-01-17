@@ -1,21 +1,40 @@
 [Unit]
-Description=InControl Server Management Panel
-After=network.target mysql.service redis.service
-Wants=mysql.service redis.service
+Description=InControl Web Panel
+Documentation=https://github.com/yourusername/incontrol
+After=network.target mariadb.service redis.service
+Requires=redis.service mariadb.service
 
 [Service]
-Type=simple
 User=incontrol
 Group=incontrol
 WorkingDirectory=/opt/incontrol
-Environment=DJANGO_SETTINGS_MODULE=incontrol.settings
-Environment=PATH=/opt/incontrol/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/opt/incontrol/venv/bin/gunicorn incontrol.wsgi:application --workers 4 --bind 127.0.0.1:8000
-ExecReload=/bin/kill -s HUP $MAINPID
-KillMode=mixed
-TimeoutStopSec=5
+ExecStart=/opt/incontrol/venv/bin/gunicorn incontrol.wsgi:application \
+    --bind 127.0.0.1:8000 \
+    --workers 4 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
+    --timeout 120 \
+    --keep-alive 5 \
+    --log-level info
+
+# Security
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/incontrol
 PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
 Restart=always
+RestartSec=5
+TimeoutStopSec=30s
 
 [Install]
 WantedBy=multi-user.target 

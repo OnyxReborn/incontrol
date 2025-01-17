@@ -1,0 +1,78 @@
+groups:
+- name: node_alerts
+  rules:
+  - alert: HighCPUUsage
+    expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: High CPU usage on {{ $labels.instance }}
+      description: CPU usage is above 90% for 5 minutes
+
+  - alert: HighMemoryUsage
+    expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 90
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: High memory usage on {{ $labels.instance }}
+      description: Memory usage is above 90% for 5 minutes
+
+  - alert: HighDiskUsage
+    expr: 100 - ((node_filesystem_avail_bytes * 100) / node_filesystem_size_bytes) > 90
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: High disk usage on {{ $labels.instance }}
+      description: Disk usage is above 90% for 5 minutes
+
+- name: service_alerts
+  rules:
+  - alert: ServiceDown
+    expr: node_systemd_unit_state{state="active"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: Service {{ $labels.name }} is down
+      description: Service has been down for more than 1 minute
+
+  - alert: NginxHighErrorRate
+    expr: rate(nginx_http_requests_total{status=~"^5.*"}[5m]) > 5
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: High Nginx error rate
+      description: Nginx is returning 5xx errors
+
+  - alert: DatabaseConnections
+    expr: mysql_global_status_threads_connected > 100
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: High number of database connections
+      description: More than 100 active database connections
+
+- name: mail_alerts
+  rules:
+  - alert: PostfixQueueTooLong
+    expr: postfix_queue_size > 100
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: Postfix queue too long
+      description: Mail queue has more than 100 items for 10 minutes
+
+  - alert: DovecotHighConnections
+    expr: dovecot_connections > 200
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: High number of Dovecot connections
+      description: More than 200 active Dovecot connections 

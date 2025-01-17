@@ -1,5 +1,5 @@
 [Unit]
-Description=InControl Celery Beat
+Description=InControl WebSocket Service
 Documentation=https://github.com/yourusername/incontrol
 After=network.target mariadb.service redis.service
 Requires=redis.service mariadb.service
@@ -8,10 +8,10 @@ Requires=redis.service mariadb.service
 User=incontrol
 Group=incontrol
 WorkingDirectory=/opt/incontrol
-ExecStart=/opt/incontrol/venv/bin/celery -A incontrol beat \
-    --loglevel=info \
-    --scheduler=django_celery_beat.schedulers:DatabaseScheduler \
-    --max-interval=300
+ExecStart=/opt/incontrol/venv/bin/daphne -b 127.0.0.1 -p 8001 incontrol.asgi:application
+Restart=always
+RestartSec=5
+TimeoutStopSec=30s
 
 # Security
 NoNewPrivileges=true
@@ -26,10 +26,6 @@ ProtectControlGroups=true
 # Resource limits
 LimitNOFILE=65535
 LimitNPROC=4096
-
-Restart=always
-RestartSec=5
-TimeoutStopSec=30s
 
 [Install]
 WantedBy=multi-user.target 

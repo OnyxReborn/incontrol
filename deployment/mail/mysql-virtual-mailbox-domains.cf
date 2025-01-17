@@ -1,0 +1,5 @@
+user = mail_admin
+password = ${MAIL_DB_PASSWORD}
+hosts = localhost
+dbname = mail
+query = SELECT 1 FROM virtual_domains WHERE name='%s' AND active = 1 

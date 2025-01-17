@@ -1,0 +1,5 @@
+user = mail_admin
+password = ${MAIL_DB_PASSWORD}
+hosts = localhost
+dbname = mail
+query = SELECT destination FROM virtual_aliases WHERE source='%s' AND active = 1 

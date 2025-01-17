@@ -33,26 +33,31 @@ class VirtualHost(models.Model):
         unique_together = ('name', 'server_type')
 
 class SSLCertificate(models.Model):
-    TYPE_CHOICES = [
-        ('lets_encrypt', 'Let\'s Encrypt'),
-        ('self_signed', 'Self-Signed'),
-        ('custom', 'Custom'),
-    ]
-
     name = models.CharField(max_length=255)
     domains = models.TextField(help_text="One domain per line")
-    certificate_type = models.CharField(max_length=11, choices=TYPE_CHOICES)
-    certificate_file = models.CharField(max_length=255)
-    private_key_file = models.CharField(max_length=255)
+    key_file = models.CharField(max_length=255)
+    cert_file = models.CharField(max_length=255)
     chain_file = models.CharField(max_length=255, blank=True)
-    issued_date = models.DateTimeField()
-    expiry_date = models.DateTimeField()
+    issuer = models.CharField(max_length=255)
+    valid_from = models.DateTimeField()
+    valid_until = models.DateTimeField()
     auto_renew = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.name} ({self.certificate_type})"
+        return self.name
+
+    @property
+    def is_expired(self):
+        from django.utils import timezone
+        return self.valid_until < timezone.now()
+
+    @property
+    def days_until_expiry(self):
+        from django.utils import timezone
+        delta = self.valid_until - timezone.now()
+        return delta.days
 
 class ProxyConfig(models.Model):
     PROXY_TYPE_CHOICES = [
@@ -93,3 +98,278 @@ class AccessControl(models.Model):
 
     class Meta:
         ordering = ['priority']
+
+class EmailAccount(models.Model):
+    username = models.CharField(max_length=64)
+    domain = models.CharField(max_length=255)
+    password = models.CharField(max_length=255)  # Will be hashed
+    quota = models.IntegerField(default=1000)  # MB
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('username', 'domain')
+
+    def __str__(self):
+        return f"{self.username}@{self.domain}"
+
+class EmailForwarder(models.Model):
+    source = models.EmailField()
+    destination = models.EmailField()
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.source} → {self.destination}"
+
+class SpamFilter(models.Model):
+    TYPE_CHOICES = (
+        ('blacklist', 'Blacklist'),
+        ('whitelist', 'Whitelist'),
+    )
+    
+    type = models.CharField(max_length=10, choices=TYPE_CHOICES)
+    value = models.CharField(max_length=255)  # Email or domain
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.type}: {self.value}"
+
+class Database(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+    collation = models.CharField(max_length=32, default='utf8mb4_general_ci')
+    size = models.BigIntegerField(default=0)  # Size in bytes
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+class DatabaseUser(models.Model):
+    username = models.CharField(max_length=32)
+    host = models.CharField(max_length=255, default='localhost')
+    password = models.CharField(max_length=255)  # Will be hashed
+    databases = models.ManyToManyField(Database, related_name='users')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('username', 'host')
+
+    def __str__(self):
+        return f"{self.username}@{self.host}"
+
+class DatabaseBackup(models.Model):
+    database = models.ForeignKey(Database, on_delete=models.CASCADE, related_name='backups')
+    file_path = models.CharField(max_length=255)
+    size = models.BigIntegerField()  # Size in bytes
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.database.name} - {self.created_at}"
+
+class IPBlock(models.Model):
+    TYPE_CHOICES = [
+        ('allow', 'Allow'),
+        ('deny', 'Deny'),
+    ]
+
+    ip_address = models.CharField(max_length=50, help_text="IP address or CIDR range")
+    rule_type = models.CharField(max_length=5, choices=TYPE_CHOICES, default='deny')
+    description = models.TextField(blank=True)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.rule_type}: {self.ip_address}"
+
+class ModSecurityRule(models.Model):
+    SEVERITY_CHOICES = [
+        ('critical', 'Critical'),
+        ('warning', 'Warning'),
+        ('notice', 'Notice'),
+    ]
+
+    rule_id = models.CharField(max_length=50, unique=True)
+    description = models.TextField()
+    rule_content = models.TextField(help_text="ModSecurity rule content")
+    severity = models.CharField(max_length=8, choices=SEVERITY_CHOICES)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.rule_id}: {self.description}"
+
+class ProtectedDirectory(models.Model):
+    path = models.CharField(max_length=255)
+    username = models.CharField(max_length=50)
+    password = models.CharField(max_length=255)  # Will be hashed
+    description = models.TextField(blank=True)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Protected Directories"
+        unique_together = ('path', 'username')
+
+    def __str__(self):
+        return f"{self.path} ({self.username})"
+
+class Subdomain(models.Model):
+    name = models.CharField(max_length=255)
+    domain = models.ForeignKey(VirtualHost, on_delete=models.CASCADE, related_name='subdomains')
+    document_root = models.CharField(max_length=255)
+    is_wildcard = models.BooleanField(default=False)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name}.{self.domain.name}"
+
+class DomainRedirect(models.Model):
+    REDIRECT_TYPE_CHOICES = [
+        ('301', 'Permanent (301)'),
+        ('302', 'Temporary (302)'),
+    ]
+
+    source_domain = models.CharField(max_length=255)
+    target_domain = models.CharField(max_length=255)
+    redirect_type = models.CharField(max_length=3, choices=REDIRECT_TYPE_CHOICES, default='301')
+    preserve_path = models.BooleanField(default=True)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.source_domain} → {self.target_domain}"
+
+class DNSZone(models.Model):
+    RECORD_TYPE_CHOICES = [
+        ('A', 'A Record'),
+        ('AAAA', 'AAAA Record'),
+        ('CNAME', 'CNAME Record'),
+        ('MX', 'MX Record'),
+        ('TXT', 'TXT Record'),
+        ('SRV', 'SRV Record'),
+        ('NS', 'NS Record'),
+        ('PTR', 'PTR Record'),
+        ('CAA', 'CAA Record'),
+    ]
+
+    domain = models.ForeignKey(VirtualHost, on_delete=models.CASCADE, related_name='dns_records')
+    name = models.CharField(max_length=255)
+    record_type = models.CharField(max_length=5, choices=RECORD_TYPE_CHOICES)
+    content = models.CharField(max_length=255)
+    ttl = models.IntegerField(default=3600)
+    priority = models.IntegerField(null=True, blank=True)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} {self.record_type} {self.content}"
+
+class BackupConfig(models.Model):
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    backup_type = models.CharField(max_length=50, choices=[
+        ('full', 'Full Backup'),
+        ('incremental', 'Incremental Backup'),
+        ('differential', 'Differential Backup')
+    ])
+    schedule = models.CharField(max_length=100, blank=True)  # Cron expression
+    retention_days = models.IntegerField(default=30)
+    backup_path = models.CharField(max_length=255, default='/var/lib/incontrol/backups')
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.backup_type})"
+
+class BackupJob(models.Model):
+    config = models.ForeignKey(BackupConfig, on_delete=models.CASCADE)
+    status = models.CharField(max_length=50, choices=[
+        ('pending', 'Pending'),
+        ('running', 'Running'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed')
+    ])
+    backup_size = models.BigIntegerField(null=True, blank=True)
+    file_path = models.CharField(max_length=255)
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"Backup {self.id} - {self.config.name} ({self.status})"
+
+class ResourceUsage(models.Model):
+    timestamp = models.DateTimeField(auto_now_add=True)
+    cpu_usage = models.FloatField()  # Percentage
+    memory_usage = models.FloatField()  # Percentage
+    disk_usage = models.FloatField()  # Percentage
+    disk_read = models.BigIntegerField()  # Bytes/s
+    disk_write = models.BigIntegerField()  # Bytes/s
+    network_rx = models.BigIntegerField()  # Bytes/s
+    network_tx = models.BigIntegerField()  # Bytes/s
+    load_average = models.CharField(max_length=50)  # 1, 5, 15 min averages
+
+    class Meta:
+        ordering = ['-timestamp']
+
+class BandwidthUsage(models.Model):
+    timestamp = models.DateTimeField(auto_now_add=True)
+    domain = models.ForeignKey(VirtualHost, on_delete=models.CASCADE, related_name='bandwidth_usage')
+    bytes_in = models.BigIntegerField()
+    bytes_out = models.BigIntegerField()
+    requests = models.IntegerField()
+
+    class Meta:
+        ordering = ['-timestamp']
+
+class ErrorLog(models.Model):
+    LEVEL_CHOICES = [
+        ('emergency', 'Emergency'),
+        ('alert', 'Alert'),
+        ('critical', 'Critical'),
+        ('error', 'Error'),
+        ('warning', 'Warning'),
+        ('notice', 'Notice'),
+        ('info', 'Info'),
+        ('debug', 'Debug')
+    ]
+
+    timestamp = models.DateTimeField()
+    level = models.CharField(max_length=10, choices=LEVEL_CHOICES)
+    source = models.CharField(max_length=100)  # nginx, php, mysql, etc.
+    message = models.TextField()
+    file_path = models.CharField(max_length=255)
+    line_number = models.IntegerField(null=True, blank=True)
+    stack_trace = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+class AccessLog(models.Model):
+    timestamp = models.DateTimeField()
+    domain = models.ForeignKey(VirtualHost, on_delete=models.CASCADE, related_name='access_logs')
+    ip_address = models.GenericIPAddressField()
+    method = models.CharField(max_length=10)
+    path = models.CharField(max_length=2048)
+    status_code = models.IntegerField()
+    user_agent = models.TextField()
+    referer = models.TextField(blank=True)
+    response_time = models.FloatField()  # milliseconds
+    response_size = models.IntegerField()  # bytes
+
+    class Meta:
+        ordering = ['-timestamp']

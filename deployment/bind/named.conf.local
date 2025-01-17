@@ -1,0 +1,19 @@
+// Zone configuration
+zone "example.com" {
+    type master;
+    file "/etc/bind/zones/db.example.com";
+    allow-query { any; };
+    allow-transfer { none; };
+    notify yes;
+    also-notify { };
+};
+
+// Reverse zone configuration
+zone "2.0.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/zones/db.192.0.2";
+    allow-query { any; };
+    allow-transfer { none; };
+    notify yes;
+    also-notify { };
+}; 

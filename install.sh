@@ -176,7 +176,23 @@ setup_application() {
     log "Setting up application..."
     
     # Copy application files
-    cp -r incontrol/* /opt/incontrol/
+    if [ ! -d "incontrol" ]; then
+        error "incontrol directory not found"
+    fi
+    
+    # Create destination directory if it doesn't exist
+    mkdir -p /opt/incontrol
+    
+    # Copy files individually to ensure proper error handling
+    cp incontrol/settings.py /opt/incontrol/
+    cp incontrol/urls.py /opt/incontrol/
+    cp incontrol/celery.py /opt/incontrol/
+    cp incontrol/asgi.py /opt/incontrol/
+    cp incontrol/wsgi.py /opt/incontrol/
+    cp incontrol/__init__.py /opt/incontrol/
+    
+    # Set proper permissions
+    chown -R www-data:www-data /opt/incontrol
     
     # Set up virtual environment and install dependencies
     setup_python

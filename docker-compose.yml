@@ -3,28 +3,36 @@ version: '3.8'
 services:
   ubuntu-test:
     build: .
-    ports:
-      - "2222:22"      # SSH
-      - "8000:8000"    # Django
-      - "80:80"        # Nginx
-      - "443:443"      # Nginx SSL
-      - "9090:9090"    # Prometheus
-      - "9093:9093"    # AlertManager
-      - "9100:9100"    # Node Exporter
-    volumes:
-      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    container_name: incontrol-ubuntu-test-1
     privileged: true
-    cap_add:
-      - SYS_ADMIN
-    security_opt:
-      - seccomp:unconfined
+    volumes:
+      - .:/app
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
     tmpfs:
       - /run
       - /run/lock
       - /tmp
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_ADMIN
+    ports:
+      - "127.0.0.1:80:80"        # HTTP
+      - "127.0.0.1:443:443"      # HTTPS
+      - "127.0.0.1:53:53"        # DNS
+      - "127.0.0.1:25:25"        # SMTP
+      - "127.0.0.1:465:465"      # SMTPS
+      - "127.0.0.1:587:587"      # Submission
+      - "127.0.0.1:993:993"      # IMAPS
+      - "127.0.0.1:8080:8080"    # Web Interface
+      - "127.0.0.1:9090:9090"    # Prometheus
+      - "127.0.0.1:9093:9093"    # Alertmanager
+      - "127.0.0.1:9100:9100"    # Node Exporter
+    networks:
+      - incontrol_net
     stop_signal: SIGRTMIN+3
     restart: unless-stopped
 
-volumes:
-  incontrol_data:
-  incontrol_logs: 
+networks:
+  incontrol_net:
+    driver: bridge 

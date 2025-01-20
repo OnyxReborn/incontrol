@@ -78,7 +78,7 @@ class DNSQuery(models.Model):
     ]
 
     domain = models.CharField(max_length=255)
-    query_type = models.CharField(max_length=4, choices=QUERY_TYPE_CHOICES)
+    query_type = models.CharField(max_length=5, choices=QUERY_TYPE_CHOICES)
     nameserver = models.CharField(max_length=255, blank=True)
     response = models.JSONField()
     response_time = models.FloatField()  # in milliseconds

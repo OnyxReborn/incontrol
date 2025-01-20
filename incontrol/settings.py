@@ -39,17 +39,18 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
-    'monitoring.apps.MonitoringConfig',
-    'accounts.apps.AccountsConfig',
-    'system.apps.SystemConfig',
-    'webserver.apps.WebserverConfig',
-    'database.apps.DatabaseConfig',
-    'mail.apps.MailConfig',
-    'security.apps.SecurityConfig',
-    'backup.apps.BackupConfig',
-    'dns.apps.DnsConfig',
-    'filemanager.apps.FilemanagerConfig',
-    'processmanager.apps.ProcessmanagerConfig',
+    'core.apps.CoreConfig',
+    # 'monitoring.apps.MonitoringConfig',
+    # 'accounts.apps.AccountsConfig',
+    # 'system.apps.SystemConfig',
+    # 'webserver.apps.WebserverConfig',
+    # 'database.apps.DatabaseConfig',
+    # 'mail.apps.MailConfig',
+    # 'security.apps.SecurityConfig',
+    # 'backup.apps.BackupConfig',
+    # 'dns.apps.DnsConfig',
+    # 'filemanager.apps.FilemanagerConfig',
+    # 'processmanager.apps.ProcessmanagerConfig',
 ]
 
 MIDDLEWARE = [
@@ -97,12 +98,8 @@ CHANNEL_LAYERS = {
 # Database
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('DB_NAME', 'incontrol'),
-        'USER': os.getenv('DB_USER', 'incontrol'),
-        'PASSWORD': os.getenv('DB_PASSWORD', ''),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '3306'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 

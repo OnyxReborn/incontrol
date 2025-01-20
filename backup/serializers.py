@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Backup, BackupSchedule, BackupLog
+from .models import Backup, BackupSchedule, BackupLog, BackupLocation
 
 class BackupLogSerializer(serializers.ModelSerializer):
     class Meta:
@@ -81,4 +81,14 @@ class BackupStatsSerializer(serializers.Serializer):
             allow_empty=False
         ),
         allow_empty=True
-    ) 
+    )
+
+class BackupLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BackupLocation
+        fields = [
+            'id', 'name', 'location_type', 'path', 'credentials',
+            'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {'credentials': {'write_only': True}} 

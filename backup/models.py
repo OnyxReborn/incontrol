@@ -1,31 +1,26 @@
 from django.db import models
 from django.utils import timezone
 from django.core.validators import MinValueValidator
+from django.contrib.auth.models import User
 
 class BackupLocation(models.Model):
     LOCATION_TYPES = [
-        ('local', 'Local Storage'),
+        ('local', 'Local Directory'),
         ('s3', 'Amazon S3'),
         ('ftp', 'FTP Server'),
         ('sftp', 'SFTP Server'),
     ]
 
     name = models.CharField(max_length=255)
-    type = models.CharField(max_length=20, choices=LOCATION_TYPES)
-    path = models.CharField(max_length=255, help_text="Local path or remote URL")
-    credentials = models.JSONField(null=True, blank=True, help_text="Encrypted credentials for remote storage")
+    location_type = models.CharField(max_length=10, choices=LOCATION_TYPES)
+    path = models.CharField(max_length=255)
+    credentials = models.JSONField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    last_verified = models.DateTimeField(null=True, blank=True)
-    max_storage = models.BigIntegerField(
-        null=True, 
-        blank=True,
-        validators=[MinValueValidator(1)],
-        help_text="Maximum storage size in bytes"
-    )
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.name} ({self.type})"
+        return f"{self.name} ({self.location_type})"
 
     class Meta:
         ordering = ['name']

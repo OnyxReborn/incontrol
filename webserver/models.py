@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 class VirtualHost(models.Model):
     SERVER_TYPE_CHOICES = [
@@ -50,12 +51,10 @@ class SSLCertificate(models.Model):
 
     @property
     def is_expired(self):
-        from django.utils import timezone
         return self.valid_until < timezone.now()
 
     @property
     def days_until_expiry(self):
-        from django.utils import timezone
         delta = self.valid_until - timezone.now()
         return delta.days
 
@@ -373,3 +372,38 @@ class AccessLog(models.Model):
 
     class Meta:
         ordering = ['-timestamp']
+
+class CrontabSchedule(models.Model):
+    minute = models.CharField(max_length=64, default='*')
+    hour = models.CharField(max_length=64, default='*')
+    day_of_week = models.CharField(max_length=64, default='*')
+    day_of_month = models.CharField(max_length=64, default='*')
+    month_of_year = models.CharField(max_length=64, default='*')
+    timezone = models.CharField(max_length=64, default='UTC')
+
+    class Meta:
+        app_label = 'webserver'
+
+    def __str__(self):
+        return f'{self.minute} {self.hour} {self.day_of_month} {self.month_of_year} {self.day_of_week} (timezone: {self.timezone})'
+
+class PeriodicTask(models.Model):
+    name = models.CharField(max_length=200, unique=True)
+    task = models.CharField(max_length=200)
+    crontab = models.ForeignKey(
+        CrontabSchedule,
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        verbose_name='crontab schedule'
+    )
+    enabled = models.BooleanField(default=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    total_run_count = models.PositiveIntegerField(default=0)
+    date_changed = models.DateTimeField(auto_now=True)
+    description = models.TextField(blank=True)
+
+    class Meta:
+        app_label = 'webserver'
+
+    def __str__(self):
+        return self.name

@@ -2,7 +2,6 @@ from celery import shared_task
 from django.utils import timezone
 from datetime import timedelta
 import logging
-from core.models import Notification
 from .models import (
     SSLCertificate, ResourceUsage, BandwidthUsage, VirtualHost, 
     AccessLog, ErrorLog, BackupJob, BackupConfig
@@ -16,6 +15,7 @@ import psutil
 import re
 from collections import defaultdict
 from datetime import datetime
+from django.conf import settings
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -95,110 +95,105 @@ def renew_lets_encrypt_certificate(cert_id):
         ) 
 
 @shared_task
-def create_backup(job_id):
+def create_backup(backup_job_id):
+    backup_job = None
     try:
-        job = BackupJob.objects.get(id=job_id)
-        job.status = 'running'
-        job.save()
-
-        # Create backup directory if it doesn't exist
-        os.makedirs(os.path.dirname(job.file_path), exist_ok=True)
-
-        # Backup database
-        db_backup_path = f"{os.path.dirname(job.file_path)}/db_backup.sql"
-        subprocess.run([
-            'mysqldump',
-            '--user=incontrol',
-            f'--password={os.getenv("DB_PASSWORD")}',
-            'incontrol',
-            f'--result-file={db_backup_path}'
-        ], check=True)
-
-        # Create tar archive
-        with tarfile.open(job.file_path, "w:gz") as tar:
-            # Add database backup
-            tar.add(db_backup_path, arcname=os.path.basename(db_backup_path))
+        backup_job = BackupJob.objects.get(id=backup_job_id)
+        backup_job.status = 'running'
+        backup_job.save()
+        
+        # Get backup config
+        config = backup_job.config
+        
+        # Create temp directory for backup
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create tar file
+            timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+            backup_filename = f'backup_{timestamp}.tar.gz'
+            backup_path = os.path.join(config.backup_directory, backup_filename)
             
-            # Add configuration files
-            tar.add('/etc/nginx/sites-available', arcname='nginx/sites-available')
-            tar.add('/etc/nginx/sites-enabled', arcname='nginx/sites-enabled')
-            tar.add('/etc/nginx/ssl', arcname='nginx/ssl')
-            tar.add('/etc/bind/zones', arcname='bind/zones')
+            with tarfile.open(backup_path, 'w:gz') as tar:
+                # Backup nginx config
+                nginx_conf_dir = '/etc/nginx'
+                if os.path.exists(nginx_conf_dir):
+                    tar.add(nginx_conf_dir, arcname='nginx')
+                
+                # Backup SSL certificates
+                ssl_certs_dir = '/etc/ssl'
+                if os.path.exists(ssl_certs_dir):
+                    tar.add(ssl_certs_dir, arcname='ssl')
+                
+                # Backup database
+                db_backup_path = os.path.join(temp_dir, 'database.sql')
+                with open(db_backup_path, 'w') as f:
+                    subprocess.run(['pg_dump', settings.DATABASES['default']['NAME']], 
+                                stdout=f, check=True)
+                tar.add(db_backup_path, arcname='database.sql')
             
-            # Add website files
-            tar.add('/var/www/vhosts', arcname='www')
+            # Update backup job
+            backup_job.file_path = backup_path
+            backup_job.status = 'completed'
+            backup_job.completed_at = timezone.now()
+            backup_job.save()
             
-            # Add application files
-            tar.add('/opt/incontrol', arcname='incontrol',
-                   filter=lambda x: None if '.git' in x.name or 'node_modules' in x.name else x)
-
-        # Clean up database backup file
-        os.remove(db_backup_path)
-
-        # Update job status
-        job.status = 'completed'
-        job.backup_size = os.path.getsize(job.file_path)
-        job.completed_at = timezone.now()
-        job.save()
-
-        # Clean up old backups
-        cleanup_old_backups(job.config)
-
+            # Cleanup old backups
+            cleanup_old_backups(config)
+            
     except Exception as e:
-        job.status = 'failed'
-        job.error_message = str(e)
-        job.save()
+        logger.error(f'Backup failed: {str(e)}')
+        if backup_job:
+            backup_job.status = 'failed'
+            backup_job.error_message = str(e)
+            backup_job.save()
         raise
 
 @shared_task
-def restore_backup(job_id):
+def restore_backup(backup_job_id):
+    backup_job = None
     try:
-        job = BackupJob.objects.get(id=job_id)
+        backup_job = BackupJob.objects.get(id=backup_job_id)
+        backup_job.status = 'restoring'
+        backup_job.save()
         
-        # Extract backup
-        with tarfile.open(job.file_path, "r:gz") as tar:
-            # Create temporary directory for extraction
-            temp_dir = tempfile.mkdtemp()
-            tar.extractall(temp_dir)
-
+        if not os.path.exists(backup_job.file_path):
+            raise FileNotFoundError(f'Backup file not found: {backup_job.file_path}')
+        
+        # Create temp directory for restore
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Extract backup
+            with tarfile.open(backup_job.file_path, 'r:gz') as tar:
+                tar.extractall(temp_dir)
+            
+            # Restore nginx config
+            nginx_backup = os.path.join(temp_dir, 'nginx')
+            if os.path.exists(nginx_backup):
+                subprocess.run(['rm', '-rf', '/etc/nginx'], check=True)
+                subprocess.run(['cp', '-r', nginx_backup, '/etc/nginx'], check=True)
+                subprocess.run(['nginx', '-t'], check=True)  # Test config
+                subprocess.run(['nginx', '-s', 'reload'], check=True)
+            
+            # Restore SSL certificates
+            ssl_backup = os.path.join(temp_dir, 'ssl')
+            if os.path.exists(ssl_backup):
+                subprocess.run(['rm', '-rf', '/etc/ssl'], check=True)
+                subprocess.run(['cp', '-r', ssl_backup, '/etc/ssl'], check=True)
+            
             # Restore database
-            db_backup = os.path.join(temp_dir, 'db_backup.sql')
+            db_backup = os.path.join(temp_dir, 'database.sql')
             if os.path.exists(db_backup):
-                subprocess.run([
-                    'mysql',
-                    '--user=incontrol',
-                    f'--password={os.getenv("DB_PASSWORD")}',
-                    'incontrol',
-                    f'< {db_backup}'
-                ], shell=True, check=True)
-
-            # Restore configuration files
-            subprocess.run(['cp', '-r', f'{temp_dir}/nginx/sites-available/*', '/etc/nginx/sites-available/'], shell=True)
-            subprocess.run(['cp', '-r', f'{temp_dir}/nginx/sites-enabled/*', '/etc/nginx/sites-enabled/'], shell=True)
-            subprocess.run(['cp', '-r', f'{temp_dir}/nginx/ssl/*', '/etc/nginx/ssl/'], shell=True)
-            subprocess.run(['cp', '-r', f'{temp_dir}/bind/zones/*', '/etc/bind/zones/'], shell=True)
-
-            # Restore website files
-            subprocess.run(['cp', '-r', f'{temp_dir}/www/*', '/var/www/vhosts/'], shell=True)
-
-            # Restore application files (excluding sensitive files)
-            subprocess.run([
-                'cp', '-r',
-                '--exclude=.env',
-                '--exclude=node_modules',
-                '--exclude=.git',
-                f'{temp_dir}/incontrol/*',
-                '/opt/incontrol/'
-            ], shell=True)
-
-            # Clean up
-            shutil.rmtree(temp_dir)
-
-            # Restart services
-            subprocess.run(['systemctl', 'restart', 'nginx', 'bind9'])
-
+                subprocess.run(['psql', settings.DATABASES['default']['NAME'], 
+                             '-f', db_backup], check=True)
+        
+        backup_job.status = 'restored'
+        backup_job.completed_at = timezone.now()
+        backup_job.save()
+        
     except Exception as e:
-        logger.error(f"Backup restoration failed: {str(e)}")
+        logger.error(f'Restore failed: {str(e)}')
+        if backup_job:
+            backup_job.status = 'failed'
+            backup_job.error_message = str(e)
+            backup_job.save()
         raise
 
 def cleanup_old_backups(config):

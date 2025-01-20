@@ -54,21 +54,21 @@ class AuditLog(models.Model):
 
 class Notification(models.Model):
     LEVEL_CHOICES = [
-        ('INFO', 'Information'),
-        ('WARNING', 'Warning'),
-        ('ERROR', 'Error'),
-        ('CRITICAL', 'Critical'),
+        ('info', 'Info'),
+        ('warning', 'Warning'),
+        ('error', 'Error'),
     ]
     
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
     message = models.TextField()
-    level = models.CharField(max_length=10, choices=LEVEL_CHOICES, default='INFO')
+    level = models.CharField(max_length=7, choices=LEVEL_CHOICES, default='info')
     read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
         ordering = ['-created_at']
         
     def __str__(self):
-        return f"{self.title} - {self.level} - {self.created_at}"
+        return f"{self.title} ({self.level})"

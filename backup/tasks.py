@@ -48,14 +48,13 @@ def create_backup(backup_id):
                         tar.add(dir_path, arcname=os.path.basename(dir_path))
                         create_backup_log(backup, f"Added {dir_path} to backup")
 
-            # Get backup size
-            backup.size = os.path.getsize(backup_path)
-            backup.path = backup_path
+            # Update backup record
             backup.status = 'completed'
+            backup.path = backup_path
+            backup.size = os.path.getsize(backup_path)
             backup.completed_at = timezone.now()
             backup.save()
-
-            create_backup_log(backup, f"Backup completed successfully. Size: {backup.size} bytes")
+            create_backup_log(backup, "Backup completed successfully")
 
         except Exception as e:
             create_backup_log(backup, f"Error during backup: {str(e)}", 'error')
@@ -78,35 +77,31 @@ def restore_backup(backup_id):
     try:
         create_backup_log(backup, "Starting restore process")
 
-        if not os.path.exists(backup.path):
-            raise FileNotFoundError("Backup file not found")
-
-        # Create temporary directory for restoration
+        # Create temporary directory for restore
         temp_dir = tempfile.mkdtemp()
 
         try:
-            # Extract backup
+            # Extract backup archive
             create_backup_log(backup, "Extracting backup archive")
             with tarfile.open(backup.path, 'r:gz') as tar:
                 tar.extractall(temp_dir)
 
-            # Restore files
+            # Restore system files
             create_backup_log(backup, "Restoring system files")
             for item in os.listdir(temp_dir):
-                src_path = os.path.join(temp_dir, item)
-                if item == 'etc':
-                    dst_path = '/etc'
-                elif item == 'www':
-                    dst_path = '/var/www'
-                elif item == 'log':
-                    dst_path = '/var/log'
+                item_path = os.path.join(temp_dir, item)
+                if os.path.isdir(item_path):
+                    # Restore directory
+                    dest_path = os.path.join('/', item)
+                    if os.path.exists(dest_path):
+                        shutil.rmtree(dest_path)
+                    shutil.copytree(item_path, dest_path)
+                    create_backup_log(backup, f"Restored directory: {dest_path}")
                 else:
-                    continue
-
-                if os.path.exists(dst_path):
-                    shutil.rmtree(dst_path)
-                shutil.copytree(src_path, dst_path)
-                create_backup_log(backup, f"Restored {dst_path}")
+                    # Restore file
+                    dest_path = os.path.join('/', item)
+                    shutil.copy2(item_path, dest_path)
+                    create_backup_log(backup, f"Restored file: {dest_path}")
 
             create_backup_log(backup, "Restore completed successfully")
 
@@ -143,19 +138,37 @@ def process_backup_schedules():
 
 @shared_task
 def cleanup_old_backups():
-    schedules = BackupSchedule.objects.all()
-    for schedule in schedules:
-        retention_date = timezone.now() - timezone.timedelta(days=schedule.retention_days)
-        old_backups = Backup.objects.filter(
-            created_at__lt=retention_date,
-            status='completed',
-            type=schedule.type
-        )
-
-        for backup in old_backups:
-            try:
-                if os.path.exists(backup.path):
-                    os.remove(backup.path)
-                backup.delete()
-            except Exception as e:
-                print(f"Error cleaning up backup {backup.id}: {str(e)}") 
+    """Remove old backups based on retention policy."""
+    try:
+        # Get all backup schedules
+        schedules = BackupSchedule.objects.filter(enabled=True)
+        
+        for schedule in schedules:
+            # Calculate cutoff date based on retention days
+            cutoff_date = timezone.now() - timezone.timedelta(days=schedule.retention_days)
+            
+            # Get old backups for this schedule
+            old_backups = Backup.objects.filter(
+                created_at__lt=cutoff_date,
+                type=schedule.type,
+                status='completed'
+            )
+            
+            # Delete old backups
+            for backup in old_backups:
+                try:
+                    # Delete backup file
+                    if os.path.exists(backup.path):
+                        os.remove(backup.path)
+                    
+                    # Delete backup record
+                    backup.delete()
+                    
+                except Exception as e:
+                    print(f"Error deleting backup {backup.id}: {e}")
+                    continue
+        
+        return True
+    except Exception as e:
+        print(f"Error cleaning up old backups: {e}")
+        return False 

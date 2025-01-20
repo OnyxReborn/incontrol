@@ -19,7 +19,7 @@ from .serializers import (
     BackupStatsSerializer,
     BackupLogSerializer,
 )
-from .tasks import perform_backup, restore_backup, create_backup, cleanup_old_backups
+from .tasks import create_backup, restore_backup, cleanup_old_backups
 
 class BackupLocationViewSet(viewsets.ModelViewSet):
     queryset = BackupLocation.objects.all()

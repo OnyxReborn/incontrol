@@ -79,7 +79,7 @@ class SecurityIncident(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField()
     severity = models.CharField(max_length=8, choices=SEVERITY_CHOICES)
-    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='open')
+    status = models.CharField(max_length=13, choices=STATUS_CHOICES, default='open')
     source_ip = models.GenericIPAddressField(null=True, blank=True)
     target_ip = models.GenericIPAddressField(null=True, blank=True)
     detected_at = models.DateTimeField()
